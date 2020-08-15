@@ -23,22 +23,21 @@ function initialize() {
     mediaSource.addEventListener('sourceopen', onMediaSourceOpen);
 }
 
-function onMediaSourceOpen() {
+async function onMediaSourceOpen() {
     sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.4D401E, mp4a.40.2"');
 
-    getFileStat(assetURL,(clen)=> {
-        console.log((clen / 1024 / 1024).toFixed(2), 'MB')
-        chunk_size = Math.ceil(clen / chunk_total);
-        fetchChunk(assetURL, 0, chunk_size - 1, appendChunk);
-        chunk_stat[0]=true
-    })
+    const head = await fetch( assetURL, { method:'HEAD' } )
+    const clen = head.headers.get("clen");
+    
+    console.log((clen / 1024 / 1024).toFixed(2), 'MB')
+
+    chunk_size  = Math.ceil( clen / chunk_total );
+    const chunk = await fetchChunk(assetURL, 0, chunk_size - 1);
+    sourceBuffer.appendBuffer(chunk);
+    chunk_stat[0] = true
 }
 
-function appendChunk(buff) {
-    sourceBuffer.appendBuffer(new Uint8Array(buff));
-}
-
-function checkBuffer () {
+async function checkBuffer () {
     const curr_chunk = Math.ceil(video.currentTime/chunk_dur);
     if(curr_chunk === chunk_total) {
         console.log("reach end of stream.")
@@ -52,27 +51,21 @@ function checkBuffer () {
     chunk_stat[curr_chunk] = true;
     const start = chunk_size * curr_chunk;
     const end   = start + chunk_size - 1;
-    fetchChunk(assetURL,start,end,appendChunk);
-  };
+    const chunk = await fetchChunk(assetURL,start,end);
+    sourceBuffer.appendBuffer(chunk);
+};
 
-function getFileStat(url,callback){
-    const xhr = new XMLHttpRequest();
-    xhr.open('HEAD', url);
-    xhr.onload = () => callback(xhr.getResponseHeader("clen"));
-    xhr.send();
-}
+async function fetchChunk(url,start,end) {
+    const res = await fetch(
+        url,
+        {
+            method: 'GET',
+            headers: { "Range":`bytes=${start}-${end}` }
+        }
+    )
 
-function fetchChunk(url,start,end, callback) {
-
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', url);
-    xhr.responseType = 'arraybuffer';
-    xhr.setRequestHeader("Range",`bytes=${start}-${end}`);
-    xhr.onload = (e) => {
-        console.log(`Downloaded range ${start}-${end}. Status ${xhr.status}`);
-        callback(e.target.response);
-    };
-    xhr.send();
+    console.log(`Downloaded range ${start}-${end}. Status ${res.status}`);
+    return await res.arrayBuffer();
 }
 
 initialize()
