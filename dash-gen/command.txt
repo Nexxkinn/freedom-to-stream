@@ -1,0 +1,1 @@
+MP4Box -dash 1000 -rap -frag-rap test.mp4
